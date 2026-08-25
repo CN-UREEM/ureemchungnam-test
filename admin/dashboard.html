@@ -245,6 +245,8 @@ if(isNativeApp) return;
 async function syncPushButton(){
   const btn=document.getElementById('pushBtn');
 
+console.log('NATIVE APP:', isNativeApp, navigator.userAgent);
+
 if(isNativeApp){
   btn.textContent='📱 앱 알림 정상 작동';
   btn.classList.add('on');
