@@ -126,6 +126,8 @@ const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 let rows=[];
 let selected=null;
 
+const isNativeApp = navigator.userAgent.includes('UREEM_CSM_APP');
+
 function esc(v){
   return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
 }
@@ -202,6 +204,8 @@ async function getPushRegistration(){
 }
 
 async function enableWebPush(){
+if(isNativeApp) return;
+
   const btn=document.getElementById('pushBtn');
   btn.disabled=true;
   try{
@@ -240,6 +244,14 @@ async function enableWebPush(){
 
 async function syncPushButton(){
   const btn=document.getElementById('pushBtn');
+
+if(isNativeApp){
+  btn.textContent='📱 앱 알림 정상 작동';
+  btn.classList.add('on');
+  btn.disabled=true;
+  return;
+}
+
   try{
     if(!('serviceWorker' in navigator)||!('PushManager' in window)){btn.textContent='🔕 미지원';btn.disabled=true;return;}
     const reg=await getPushRegistration();
