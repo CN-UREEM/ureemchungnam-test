@@ -1,1 +1,5 @@
-{"imports":{}}
+{
+  "imports": {
+    "web-push": "npm:web-push@3.6.7"
+  }
+}

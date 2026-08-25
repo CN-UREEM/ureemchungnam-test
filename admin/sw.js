@@ -1,28 +1,29 @@
-self.addEventListener('install', event => self.skipWaiting());
-self.addEventListener('activate', event => event.waitUntil(self.clients.claim()));
-
 self.addEventListener('push', event => {
   let data = {};
   try { data = event.data ? event.data.json() : {}; } catch (_) {}
   const title = data.title || '유림텔레콤 신규 상담';
   const options = {
-    body: data.body || '새로운 인터넷 상담 신청이 접수되었습니다.',
-    icon: data.icon || '/ureemchungnam-test/icon-192.png',
-    badge: data.badge || '/ureemchungnam-test/icon-192.png',
-    tag: data.tag || 'ureem-new-consultation',
+    body: data.body || '새로운 상담 신청이 접수되었습니다.',
+    tag: data.tag || 'ureem-consultation',
     renotify: true,
-    data: { url: data.url || '/ureemchungnam-test/admin/dashboard.html' }
+    requireInteraction: true,
+    data: { url: data.url || '/ureemchungnam-test/admin/' }
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const target = new URL(event.notification.data?.url || '/ureemchungnam-test/admin/dashboard.html', self.location.origin).href;
-  event.waitUntil(clients.matchAll({type:'window', includeUncontrolled:true}).then(list => {
-    for (const client of list) {
-      if ('focus' in client) { client.navigate(target); return client.focus(); }
+  const target = new URL(event.notification.data?.url || '/ureemchungnam-test/admin/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of clients) {
+      if ('focus' in client) {
+        await client.focus();
+        if ('navigate' in client) await client.navigate(target);
+        return;
+      }
     }
-    return clients.openWindow(target);
-  }));
+    if (self.clients.openWindow) await self.clients.openWindow(target);
+  })());
 });

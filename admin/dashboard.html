@@ -16,7 +16,7 @@ button,input,select{font:inherit}
 button{cursor:pointer}
 .header{height:72px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 28px;position:sticky;top:0;z-index:20}
 .brand{display:flex;align-items:center;gap:11px}.mark{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,var(--pink),var(--plum));color:#fff;display:grid;place-items:center;font-weight:900}.brand strong{font-size:16px}.brand small{display:block;font-size:10px;color:var(--muted);letter-spacing:1px}
-.logout{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 13px;font-weight:700;font-size:12px}
+.logout{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 13px;font-weight:700;font-size:12px}.push-btn{border:0;background:var(--pink);color:#fff;border-radius:10px;padding:9px 13px;font-weight:800;font-size:12px}.push-btn.on{background:#16803B}.push-btn:disabled{opacity:.6;cursor:wait}
 .wrap{max-width:1180px;margin:auto;padding:30px 22px 70px}
 .topline{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:20px}.topline h1{font-size:29px;letter-spacing:-1.5px;margin:0 0 5px}.topline p{margin:0;color:var(--muted);font-size:13px}
 .refresh{border:0;background:var(--plum);color:#fff;border-radius:11px;padding:11px 15px;font-weight:800;font-size:12px}
@@ -38,7 +38,6 @@ button{cursor:pointer}
 @media(max-width:760px){.period-summary{grid-template-columns:repeat(2,1fr);gap:8px}.period-summary>div{padding:13px}.toolbar .refresh{width:100%;margin-top:8px}}
 .activity-log{margin-top:8px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#FCFAFB}.activity-item{padding:10px 12px;border-bottom:1px solid #F0EAED;font-size:11px;line-height:1.5}.activity-item:last-child{border-bottom:0}.activity-item strong{font-size:12px}.activity-item small{display:block;color:var(--muted);margin-top:2px}
 .header-right{display:flex;align-items:center;gap:10px}
-.push-btn{border:1px solid #FFD1E6;background:#FFF4F9;color:#D91B78;border-radius:10px;padding:8px 11px;font:inherit;font-size:11px;font-weight:900;cursor:pointer}.push-btn:hover{background:#FFE8F2}.push-btn.on{background:#EAF7F0;border-color:#CDEEDB;color:#176B38}.push-btn:disabled{opacity:.55;cursor:wait}
 .online{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:900;letter-spacing:.6px;color:#16803B}
 .online i{width:7px;height:7px;border-radius:50%;background:#22C55E;box-shadow:0 0 0 4px rgba(34,197,94,.10)}
 .eyebrow{font-size:10px;font-weight:900;letter-spacing:1.3px;color:var(--pink);margin-bottom:7px}
@@ -66,7 +65,7 @@ button{cursor:pointer}
 <body>
 <header class="header">
   <div class="brand"><div class="mark">U+</div><div><strong>UREEM TELECOM</strong><small>ADMIN CONSOLE</small></div></div>
-  <div class="header-right"><span class="online"><i></i> LIVE</span><button class="push-btn" id="pushBtn" type="button">🔔 알림 켜기</button><button class="logout" id="logoutBtn">로그아웃</button></div>
+  <div class="header-right"><span class="online"><i></i> LIVE</span><button class="push-btn" id="pushBtn">🔔 알림 켜기</button><button class="logout" id="logoutBtn">로그아웃</button></div>
 </header>
 
 <main class="wrap">
@@ -188,6 +187,72 @@ function renderTable(){
   <td>${badge(r.status||'대기')}</td></tr>`).join('')}</tbody></table></div>`;
   document.querySelectorAll('tbody tr').forEach(tr=>tr.addEventListener('click',()=>openDetail(Number(tr.dataset.id))));
 }
+const VAPID_PUBLIC_KEY='BLkU7WdFwGg4ERux1eqAkgeWkrpcqTVh5TM8XmFaheQa4sPVdrgpdGL1EKfcJWTLBB96MDUeuPUdT38kqF4JduI';
+
+function urlBase64ToUint8Array(base64String){
+  const padding='='.repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
+  const rawData=atob(base64);
+  return Uint8Array.from([...rawData].map(ch=>ch.charCodeAt(0)));
+}
+
+async function getPushRegistration(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('이 브라우저는 Web Push를 지원하지 않습니다.');
+  return await navigator.serviceWorker.register('./sw.js');
+}
+
+async function enableWebPush(){
+  const btn=document.getElementById('pushBtn');
+  btn.disabled=true;
+  try{
+    if(!window.isSecureContext) throw new Error('HTTPS 환경에서만 알림을 사용할 수 있습니다.');
+    const permission=await Notification.requestPermission();
+    if(permission!=='granted') throw new Error('브라우저 알림 권한이 허용되지 않았습니다.');
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session?.user?.id) throw new Error('관리자 로그인 세션이 없습니다.');
+    const reg=await getPushRegistration();
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub){
+      sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(VAPID_PUBLIC_KEY)});
+    }
+    const json=sub.toJSON();
+    const endpoint=sub.endpoint;
+    const p256dh=json.keys?.p256dh;
+    const auth=json.keys?.auth;
+    if(!endpoint||!p256dh||!auth) throw new Error('브라우저 Push 구독 정보를 읽지 못했습니다.');
+    const {error}=await sb.from('push_subscriptions').upsert({
+      user_id:session.user.id,
+      endpoint,
+      p256dh,
+      auth
+    },{onConflict:'endpoint'});
+    if(error) throw error;
+    btn.textContent='🔔 알림 켜짐';
+    btn.classList.add('on');
+    btn.disabled=false;
+    localStorage.setItem('ureem_push_enabled','1');
+  }catch(err){
+    console.error('Web Push 등록 실패:',err);
+    alert(err?.message||'알림 설정에 실패했습니다.');
+    btn.disabled=false;
+  }
+}
+
+async function syncPushButton(){
+  const btn=document.getElementById('pushBtn');
+  try{
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){btn.textContent='🔕 미지원';btn.disabled=true;return;}
+    const reg=await getPushRegistration();
+    const sub=await reg.pushManager.getSubscription();
+    if(sub && Notification.permission==='granted'){
+      btn.textContent='🔔 알림 켜짐';
+      btn.classList.add('on');
+    }
+  }catch(e){console.warn('Push 상태 확인 실패',e);}
+}
+
+document.getElementById('pushBtn').addEventListener('click',enableWebPush);
+
 async function load(){
   const {data,error}=await sb.from('internet_consultations').select('*').order('created_at',{ascending:false});
   if(error){
@@ -270,57 +335,21 @@ document.getElementById('exportBtn').addEventListener('click',()=>{
 document.getElementById('refreshBtn').addEventListener('click',load);
 document.getElementById('closeDrawer').addEventListener('click',()=>document.getElementById('drawerBg').classList.remove('open'));
 document.getElementById('drawerBg').addEventListener('click',e=>{if(e.target.id==='drawerBg')e.currentTarget.classList.remove('open')});
-document.getElementById('logoutBtn').addEventListener('click',async()=>{await sb.auth.signOut();location.href='./index.html'});
-
-
-const PUSH_PUBLIC_KEY='BGo2yyUO_lpk9gvVi4HmAa0fyIzZDS5SMOQdp0Jt2AnThjz6_3Icma-3ZSzgjEDUHkqjowjgrj_5aSV03PivNis';
-const pushBtn=document.getElementById('pushBtn');
-function urlBase64ToUint8Array(base64String){
-  const padding='='.repeat((4-base64String.length%4)%4);
-  const base64=(base64String+padding).replace(/-/g,'+').replace(/_/g,'/');
-  const raw=atob(base64); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
-}
-async function updatePushButton(){
-  if(!('serviceWorker' in navigator)&&!('PushManager' in window)){pushBtn.textContent='알림 미지원';pushBtn.disabled=true;return;}
+document.getElementById('logoutBtn').addEventListener('click',async()=>{
   try{
-    const reg=await navigator.serviceWorker.register('./sw.js',{scope:'./'});
-    const sub=await reg.pushManager.getSubscription();
-    if(sub){pushBtn.textContent='🔔 알림 켜짐';pushBtn.classList.add('on');}
-    else{pushBtn.textContent='🔔 알림 켜기';pushBtn.classList.remove('on');}
-  }catch(e){console.error('push setup',e);pushBtn.textContent='알림 설정';}
-}
-async function enablePush(){
-  pushBtn.disabled=true; pushBtn.textContent='설정 중...';
-  try{
-    if(!('Notification' in window)||!('serviceWorker' in navigator)||!('PushManager' in window)) throw new Error('이 브라우저는 Web Push를 지원하지 않습니다.');
-    const permission=await Notification.requestPermission();
-    if(permission!=='granted') throw new Error('브라우저 알림 권한이 허용되지 않았습니다.');
-    const reg=await navigator.serviceWorker.register('./sw.js',{scope:'./'});
-    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8Array(PUSH_PUBLIC_KEY)});
-    const session=(await sb.auth.getSession()).data.session;
-    if(!session) throw new Error('관리자 로그인 세션이 없습니다.');
-    const json=sub.toJSON();
-    const {error}=await sb.from('push_subscriptions').upsert({
-      user_id:session.user.id,
-      endpoint:json.endpoint,
-      p256dh:json.keys?.p256dh,
-      auth:json.keys?.auth
-    },{onConflict:'endpoint'});
-    if(error) throw error;
-    pushBtn.textContent='🔔 알림 켜짐'; pushBtn.classList.add('on');
-    alert('알림이 켜졌습니다. 이제 새 상담 신청이 들어오면 이 기기로 알림을 받을 수 있습니다.');
-  }catch(e){
-    console.error(e); alert('알림 설정 실패: '+(e?.message||e));
-    pushBtn.textContent='🔔 알림 켜기';
-  }finally{pushBtn.disabled=false;}
-}
-pushBtn.addEventListener('click',enablePush);
+    const reg=await navigator.serviceWorker.getRegistration('./');
+    const sub=await reg?.pushManager.getSubscription();
+    if(sub) await sb.from('push_subscriptions').delete().eq('endpoint',sub.endpoint);
+  }catch(e){console.warn('Push 구독 정리 실패',e);}
+  await sb.auth.signOut();
+  location.href='./';
+});
 
 (async()=>{
   const {data}=await sb.auth.getSession();
-  if(!data.session){location.href='./index.html';return;}
+  if(!data.session){location.href='./유림텔레콤_관리자페이지_v1_로그인_키입력완료.html';return;}
   await load();
-  updatePushButton();
+  await syncPushButton();
 })();
 </script>
 </body>
