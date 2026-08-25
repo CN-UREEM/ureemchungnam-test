@@ -122,7 +122,17 @@ button{cursor:pointer}
 <script>
 const SUPABASE_URL='https://ptzbbmevdefnfjjinnie.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_0ioEfZQ2hKnMgczqit1PzA_LGWbxIf0';
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const sb=supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  }
+);
 let rows=[];
 let selected=null;
 

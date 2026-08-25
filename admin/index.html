@@ -63,7 +63,17 @@ Supabase Auth를 이용하는 관리자 로그인 화면입니다.<br>
 <script>
 const SUPABASE_URL = 'https://ptzbbmevdefnfjjinnie.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_0ioEfZQ2hKnMgczqit1PzA_LGWbxIf0';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_ANON_KEY,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: false
+    }
+  }
+);
 
 const form=document.getElementById('loginForm');
 const btn=document.getElementById('loginBtn');
